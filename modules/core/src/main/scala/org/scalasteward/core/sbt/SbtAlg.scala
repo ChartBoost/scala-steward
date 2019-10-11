@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,25 +21,33 @@ import cats.Monad
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import org.scalasteward.core.application.Config
-import org.scalasteward.core.dependency.Dependency
-import org.scalasteward.core.dependency.parser.parseDependencies
-import org.scalasteward.core.github.data.Repo
+import org.scalasteward.core.data.{Dependency, Update}
 import org.scalasteward.core.io.{FileAlg, FileData, ProcessAlg, WorkspaceAlg}
-import org.scalasteward.core.model.Update
+import org.scalasteward.core.repocache.RepoCacheRepository
 import org.scalasteward.core.sbt.command._
-import org.scalasteward.core.sbt.data.ArtificialProject
+import org.scalasteward.core.sbt.data.{ArtificialProject, SbtVersion}
+import org.scalasteward.core.scalafix.Migration
+import org.scalasteward.core.scalafmt.{scalafmtDependency, ScalafmtAlg}
+import org.scalasteward.core.update.UpdateAlg
 import org.scalasteward.core.util.Nel
+import org.scalasteward.core.vcs.data.Repo
 
 trait SbtAlg[F[_]] {
   def addGlobalPlugin(plugin: FileData): F[Unit]
 
+  def addGlobalPluginTemporarily[A](plugin: FileData)(fa: F[A]): F[A]
+
   def addGlobalPlugins: F[Unit]
+
+  def getSbtVersion(repo: Repo): F[Option[SbtVersion]]
 
   def getDependencies(repo: Repo): F[List[Dependency]]
 
   def getUpdatesForProject(project: ArtificialProject): F[List[Update.Single]]
 
   def getUpdatesForRepo(repo: Repo): F[List[Update.Single]]
+
+  def runMigrations(repo: Repo, migrations: Nel[Migration]): F[Unit]
 }
 
 object SbtAlg {
@@ -50,6 +58,8 @@ object SbtAlg {
       logger: Logger[F],
       processAlg: ProcessAlg[F],
       workspaceAlg: WorkspaceAlg[F],
+      scalafmtAlg: ScalafmtAlg[F],
+      cacheRepository: RepoCacheRepository[F],
       F: Monad[F]
   ): SbtAlg[F] =
     new SbtAlg[F] {
@@ -58,19 +68,48 @@ object SbtAlg {
           sbtDir.flatMap(dir => fileAlg.writeFileData(dir / series / "plugins", plugin))
         }
 
+      override def addGlobalPluginTemporarily[A](plugin: FileData)(fa: F[A]): F[A] =
+        sbtDir.flatMap { dir =>
+          val plugins = "plugins"
+          fileAlg.createTemporarily(dir / "0.13" / plugins / plugin.name, plugin.content) {
+            fileAlg.createTemporarily(dir / "1.0" / plugins / plugin.name, plugin.content) {
+              fa
+            }
+          }
+        }
+
       override def addGlobalPlugins: F[Unit] =
         for {
           _ <- logger.info("Add global sbt plugins")
-          _ <- addGlobalPlugin(sbtUpdatesPlugin)
+          _ <- addGlobalPlugin(scalaStewardSbt)
           _ <- addGlobalPlugin(stewardPlugin)
         } yield ()
 
+      override def getSbtVersion(repo: Repo): F[Option[SbtVersion]] =
+        for {
+          repoDir <- workspaceAlg.repoDir(repo)
+          maybeProperties <- fileAlg.readFile(repoDir / "project" / "build.properties")
+          version = maybeProperties.flatMap(parser.parseBuildProperties)
+        } yield version
+
       override def getDependencies(repo: Repo): F[List[Dependency]] =
+        for {
+          originalDependencies <- getOriginalDependencies(repo)
+          maybeSbtVersion <- getSbtVersion(repo)
+          maybeSbtDependency = maybeSbtVersion.flatMap(sbtDependency)
+          maybeScalafmtVersion <- scalafmtAlg.getScalafmtVersion(repo)
+          maybeScalafmtDependency = maybeScalafmtVersion.map(
+            scalafmtDependency(defaultScalaBinaryVersion)
+          )
+        } yield (maybeSbtDependency.toList ++ maybeScalafmtDependency.toList ++
+          originalDependencies).distinct
+
+      def getOriginalDependencies(repo: Repo): F[List[Dependency]] =
         for {
           repoDir <- workspaceAlg.repoDir(repo)
           cmd = sbtCmd(List(libraryDependenciesAsJson, reloadPlugins, libraryDependenciesAsJson))
           lines <- exec(cmd, repoDir)
-        } yield lines.flatMap(parseDependencies).distinct
+        } yield parser.parseDependencies(lines)
 
       override def getUpdatesForProject(project: ArtificialProject): F[List[Update.Single]] =
         for {
@@ -82,27 +121,56 @@ object SbtAlg {
           cmd = sbtCmd(project.dependencyUpdatesCmd)
           lines <- processAlg.exec(cmd, updatesDir)
           _ <- fileAlg.deleteForce(updatesDir)
-        } yield parser.parseSingleUpdates(lines)
+          updatesWithCrossSuffix = parser.parseSingleUpdates(lines)
+          allDeps = project.libraries ++ project.plugins
+          uncross = allDeps.map(dep => dep.artifactIdCross -> dep.artifactId).toMap
+          updates = updatesWithCrossSuffix.flatMap { update =>
+            Update.Single.artifactIdLens.modifyF(uncross.get)(update).toList
+          }
+        } yield updates
 
       override def getUpdatesForRepo(repo: Repo): F[List[Update.Single]] =
         for {
           repoDir <- workspaceAlg.repoDir(repo)
-          maybeClearCredentials = if (config.keepCredentials) Nil else List(setCredentialsToNil)
-          commands = maybeClearCredentials ++
-            List(dependencyUpdates, reloadPlugins, dependencyUpdates)
-          lines <- exec(sbtCmd(commands), repoDir)
-        } yield parser.parseSingleUpdates(lines)
+          commands = List(
+            setDependencyUpdatesFailBuild,
+            dependencyUpdates,
+            reloadPlugins,
+            dependencyUpdates
+          )
+          updates <- withTemporarySbtDependency(repo) {
+            exec(sbtCmd(commands), repoDir).map(parser.parseSingleUpdates)
+          }
+          originalDependencies <- cacheRepository.getDependencies(List(repo))
+          updatesUnderNewGroupId = originalDependencies.flatMap(
+            UpdateAlg.findUpdateUnderNewGroup
+          )
+        } yield updates ++ updatesUnderNewGroupId
+
+      override def runMigrations(repo: Repo, migrations: Nel[Migration]): F[Unit] =
+        addGlobalPluginTemporarily(scalaStewardScalafixSbt) {
+          for {
+            repoDir <- workspaceAlg.repoDir(repo)
+            scalafixCmds = for {
+              migration <- migrations
+              rule <- migration.rewriteRules
+              cmd <- Nel.of(scalafix, testScalafix)
+            } yield s"$cmd $rule"
+            _ <- exec(sbtCmd("++2.12.10!" :: scalafixEnable :: scalafixCmds.toList), repoDir)
+          } yield ()
+        }
 
       val sbtDir: F[File] =
         fileAlg.home.map(_ / ".sbt")
 
       def exec(command: Nel[String], repoDir: File): F[List[String]] =
-        if (config.ignoreOptsFiles) {
-          ignoreOptsFiles(repoDir)(processAlg.execSandboxed(command, repoDir))
-        } else processAlg.execSandboxed(command, repoDir)
+        maybeIgnoreOptsFiles(repoDir)(processAlg.execSandboxed(command, repoDir))
 
       def sbtCmd(commands: List[String]): Nel[String] =
         Nel.of("sbt", "-batch", "-no-colors", commands.mkString(";", ";", ""))
+
+      def maybeIgnoreOptsFiles[A](dir: File)(fa: F[A]): F[A] =
+        if (config.ignoreOptsFiles) ignoreOptsFiles(dir)(fa) else fa
 
       def ignoreOptsFiles[A](dir: File)(fa: F[A]): F[A] =
         fileAlg.removeTemporarily(dir / ".jvmopts") {
@@ -110,5 +178,26 @@ object SbtAlg {
             fa
           }
         }
+
+      def withTemporarySbtDependency[A](repo: Repo)(fa: F[A]): F[A] =
+        for {
+          maybeSbtDep <- getSbtVersion(repo).map(_.flatMap(sbtDependency).map(_.formatAsModuleId))
+          maybeScalafmtDep <- scalafmtAlg
+            .getScalafmtVersion(repo)
+            .map(
+              _.map(scalafmtDependency(defaultScalaBinaryVersion))
+                .map(_.formatAsModuleIdScalaVersionAgnostic)
+            )
+          fakeDeps = Option(maybeSbtDep.toList ++ maybeScalafmtDep.toList).filter(_.nonEmpty)
+          a <- fakeDeps.fold(fa) { dependencies =>
+            workspaceAlg.repoDir(repo).flatMap { repoDir =>
+              val content = dependencies
+                .map(dep => s"libraryDependencies += ${dep}")
+                .mkString(System.lineSeparator())
+              fileAlg.createTemporarily(repoDir / "project" / "tmp-sbt-dep.sbt", content)(fa)
+            }
+          }
+        } yield a
+
     }
 }

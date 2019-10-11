@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import scala.concurrent.duration.FiniteDuration
 trait DateTimeAlg[F[_]] {
   def currentTimeMillis: F[Long]
 
-  def timed[A](fa: F[A])(implicit F: Monad[F]): F[(A, FiniteDuration)] =
+  final def timed[A](fa: F[A])(implicit F: Monad[F]): F[(A, FiniteDuration)] =
     for {
       start <- currentTimeMillis
       a <- fa

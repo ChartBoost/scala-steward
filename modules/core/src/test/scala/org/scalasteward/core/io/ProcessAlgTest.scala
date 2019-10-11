@@ -1,18 +1,20 @@
 package org.scalasteward.core.io
 
 import better.files.File
-import cats.effect.IO
+import cats.effect.{Blocker, IO}
+import java.util.concurrent.Executors
+import org.scalasteward.core.TestInstances._
+import org.scalasteward.core.io.ProcessAlgTest.ioProcessAlg
 import org.scalasteward.core.mock.MockContext._
 import org.scalasteward.core.mock.MockState
 import org.scalasteward.core.util.Nel
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class ProcessAlgTest extends FunSuite with Matchers {
-  val ioProcessAlg: ProcessAlg[IO] = ProcessAlg.create[IO]
-
+class ProcessAlgTest extends AnyFunSuite with Matchers {
   test("exec echo") {
     ioProcessAlg
-      .exec(Nel.of("echo", "hello"), File.currentWorkingDirectory)
+      .exec(Nel.of("echo", "-n", "hello"), File.currentWorkingDirectory)
       .unsafeRunSync() shouldBe List("hello")
   }
 
@@ -34,8 +36,9 @@ class ProcessAlgTest extends FunSuite with Matchers {
       .unsafeRunSync()
 
     state shouldBe MockState.empty.copy(
-      commands = Vector(List(File.temp.toString, "echo", "hello")),
-      extraEnv = Vector(List(("TEST_VAR", "GREAT"), ("ANOTHER_TEST_VAR", "ALSO_GREAT")))
+      commands = Vector(
+        List("TEST_VAR=GREAT", "ANOTHER_TEST_VAR=ALSO_GREAT", File.temp.toString, "echo", "hello")
+      )
     )
   }
 
@@ -47,11 +50,21 @@ class ProcessAlgTest extends FunSuite with Matchers {
 
     state shouldBe MockState.empty.copy(
       commands = Vector(
-        List(File.temp.toString, "firejail", s"--whitelist=${File.temp}", "echo", "hello")
-      ),
-      extraEnv = Vector(
-        List(("TEST_VAR", "GREAT"), ("ANOTHER_TEST_VAR", "ALSO_GREAT"))
+        List(
+          "TEST_VAR=GREAT",
+          "ANOTHER_TEST_VAR=ALSO_GREAT",
+          File.temp.toString,
+          "firejail",
+          s"--whitelist=${File.temp}",
+          "echo",
+          "hello"
+        )
       )
     )
   }
+}
+
+object ProcessAlgTest {
+  val blocker: Blocker = Blocker.liftExecutorService(Executors.newCachedThreadPool())
+  implicit val ioProcessAlg: ProcessAlg[IO] = ProcessAlg.create[IO](blocker)
 }

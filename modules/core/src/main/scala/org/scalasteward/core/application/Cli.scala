@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,24 +18,31 @@ package org.scalasteward.core.application
 
 import caseapp._
 import caseapp.core.Error.MalformedValue
-import caseapp.core.argparser.ArgParser
-import caseapp.core.argparser.SimpleArgParser
+import caseapp.core.argparser.{ArgParser, SimpleArgParser}
 import cats.implicits._
-import org.http4s.Uri
+import org.http4s.{Http4sLiteralSyntax, Uri}
+import org.scalasteward.core.application.Cli._
 import org.scalasteward.core.util.ApplicativeThrowable
 
-trait Cli[F[_]] {
-  def parseArgs(args: List[String]): F[Cli.Args]
+import scala.concurrent.duration._
+import scala.util.Try
+
+final class Cli[F[_]](implicit F: ApplicativeThrowable[F]) {
+  def parseArgs(args: List[String]): F[Args] =
+    F.fromEither {
+      CaseApp.parse[Args](args).bimap(e => new Throwable(e.message), { case (parsed, _) => parsed })
+    }
 }
 
 object Cli {
   final case class Args(
       workspace: String,
       reposFile: String,
-      gitAuthorName: String,
+      gitAuthorName: String = "Scala Steward",
       gitAuthorEmail: String,
-      githubApiHost: Uri = Uri.uri("https://api.github.com"),
-      githubLogin: String,
+      vcsType: SupportedVCS = SupportedVCS.GitHub,
+      vcsApiHost: Uri = uri"https://api.github.com",
+      vcsLogin: String,
       gitAskPass: String,
       signCommits: Boolean = false,
       whitelist: List[String] = Nil,
@@ -43,37 +50,46 @@ object Cli {
       disableSandbox: Boolean = false,
       doNotFork: Boolean = false,
       ignoreOptsFiles: Boolean = false,
-      keepCredentials: Boolean = false,
-      envVar: List[EnvVar] = Nil
+      envVar: List[EnvVar] = Nil,
+      pruneRepos: Boolean = false,
+      processTimeout: FiniteDuration = 10.minutes
   )
+
   final case class EnvVar(name: String, value: String)
+
   implicit val envVarParser: SimpleArgParser[EnvVar] =
     SimpleArgParser.from[EnvVar]("env-var") { s =>
       s.trim.split('=').toList match {
-        case name :: value :: Nil =>
-          Right(EnvVar(name.trim, value.trim))
+        case name :: (value @ _ :: _) =>
+          Right(EnvVar(name.trim, value.mkString("=").trim))
         case _ =>
-          Left(
-            core.Error.MalformedValue(
-              "env-var",
-              "The value is expected in the following format: NAME=VALUE."
-            )
-          )
+          val error = "The value is expected in the following format: NAME=VALUE."
+          Left(MalformedValue("EnvVar", error))
       }
     }
-
-  def create[F[_]](implicit F: ApplicativeThrowable[F]): Cli[F] = new Cli[F] {
-    override def parseArgs(args: List[String]): F[Args] =
-      F.fromEither {
-        CaseApp
-          .parse[Args](args)
-          .bimap(e => new Throwable(e.message), { case (parsed, _) => parsed })
-      }
-  }
 
   implicit val uriArgParser: ArgParser[Uri] =
     ArgParser[String].xmapError(
       _.renderString,
       s => Uri.fromString(s).leftMap(pf => MalformedValue("Uri", pf.message))
     )
+
+  implicit val finiteDurationParser: ArgParser[FiniteDuration] = {
+    val error = Left(
+      MalformedValue(
+        "FiniteDuration",
+        "The value is expected in the following format: <length><unit>"
+      )
+    )
+    ArgParser[String].xmapError(
+      _.toString(),
+      s =>
+        Try {
+          Duration(s) match {
+            case fd: FiniteDuration => Right(fd)
+            case _                  => error
+          }
+        }.getOrElse(error)
+    )
+  }
 }

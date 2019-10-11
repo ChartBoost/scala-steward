@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,22 +17,25 @@
 package org.scalasteward.core.io
 
 import better.files.File
-import cats.Functor
 import cats.effect.Sync
 import cats.implicits._
-import fs2.{Pipe, Stream}
+import cats.{Functor, Traverse}
+import fs2.Stream
+import io.chrisdavenport.log4cats.Logger
 import org.apache.commons.io.FileUtils
 import org.scalasteward.core.util
 import org.scalasteward.core.util.MonadThrowable
 
 trait FileAlg[F[_]] {
+  def createTemporarily[A](file: File, content: String)(fa: F[A]): F[A]
+
   def deleteForce(file: File): F[Unit]
 
   def ensureExists(dir: File): F[File]
 
   def home: F[File]
 
-  def isSymlink(file: File): F[Boolean]
+  def isRegularFile(file: File): F[Boolean]
 
   def removeTemporarily[A](file: File)(fa: F[A]): F[A]
 
@@ -42,33 +45,47 @@ trait FileAlg[F[_]] {
 
   def writeFile(file: File, content: String): F[Unit]
 
-  def editFile(file: File, edit: String => Option[String])(
+  def containsString(file: File, string: String)(implicit F: Functor[F]): F[Boolean] =
+    readFile(file).map(_.fold(false)(_.contains(string)))
+
+  final def editFile(file: File, edit: String => Option[String])(
       implicit F: MonadThrowable[F]
   ): F[Boolean] =
     readFile(file)
       .flatMap(_.flatMap(edit).fold(F.pure(false))(writeFile(file, _).as(true)))
       .adaptError { case t => new Throwable(s"failed to edit $file", t) }
 
-  def editSourceFiles(dir: File, edit: String => Option[String])(implicit F: Sync[F]): F[Boolean] =
-    walkSourceFiles(dir).evalMap(editFile(_, edit)).compile.fold(false)(_ || _)
+  final def editFiles[G[_]](files: G[File], edit: String => Option[String])(
+      implicit
+      F: MonadThrowable[F],
+      G: Traverse[G]
+  ): F[Boolean] =
+    files.traverse(editFile(_, edit)).map(_.foldLeft(false)(_ || _))
 
-  def ignoreSymlinks(implicit F: Functor[F]): Pipe[F, File, File] =
-    util.evalFilter(file => isSymlink(file).map(!_))
+  final def findFilesContaining(dir: File, string: String, fileFilter: File => Boolean)(
+      implicit F: Sync[F]
+  ): F[List[File]] =
+    walk(dir)
+      .through(util.evalFilter(isRegularFile))
+      .filter(fileFilter)
+      .through(util.evalFilter(containsString(_, string)))
+      .compile
+      .toList
 
-  def walkSourceFiles(dir: File)(implicit F: Functor[F]): Stream[F, File] =
-    walk(dir).filter(isSourceFile).through(ignoreSymlinks)
-
-  def writeFileData(dir: File, fileData: FileData): F[Unit] =
+  final def writeFileData(dir: File, fileData: FileData): F[Unit] =
     writeFile(dir / fileData.name, fileData.content)
 }
 
 object FileAlg {
-  def create[F[_]](implicit F: Sync[F]): FileAlg[F] =
+  def create[F[_]](implicit logger: Logger[F], F: Sync[F]): FileAlg[F] =
     new FileAlg[F] {
+      override def createTemporarily[A](file: File, content: String)(fa: F[A]): F[A] =
+        F.bracket(writeFile(file, content))(_ => fa)(_ => deleteForce(file))
+
       override def deleteForce(file: File): F[Unit] =
         F.delay(if (file.exists) FileUtils.forceDelete(file.toJava))
 
-      def ensureExists(dir: File): F[File] =
+      override def ensureExists(dir: File): F[File] =
         F.delay {
           if (!dir.exists) dir.createDirectories()
           dir
@@ -77,14 +94,14 @@ object FileAlg {
       override def home: F[File] =
         F.delay(File.home)
 
-      override def isSymlink(file: File): F[Boolean] =
-        F.delay(file.isSymbolicLink)
+      override def isRegularFile(file: File): F[Boolean] =
+        F.delay(file.isRegularFile(File.LinkOptions.noFollow))
 
       override def removeTemporarily[A](file: File)(fa: F[A]): F[A] =
         F.bracket {
           F.delay {
-            if (file.exists) Some(file.moveTo(File.newTemporaryFile(), overwrite = true))
-            else None
+            val copyOptions = File.CopyOptions(overwrite = true)
+            if (file.exists) Some(file.moveTo(File.newTemporaryFile())(copyOptions)) else None
           }
         } { _ =>
           fa
@@ -100,6 +117,8 @@ object FileAlg {
         Stream.eval(F.delay(dir.walk())).flatMap(Stream.fromIterator(_))
 
       override def writeFile(file: File, content: String): F[Unit] =
-        file.parentOption.fold(F.unit)(ensureExists(_).void) >> F.delay(file.write(content)).void
+        logger.debug(s"Write $file") >>
+          file.parentOption.fold(F.unit)(ensureExists(_).void) >>
+          F.delay(file.write(content)).void
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,31 +20,30 @@ import cats.data.OptionT
 import cats.implicits._
 import io.chrisdavenport.log4cats.Logger
 import io.circe.config.parser
-import org.scalasteward.core.github.data.Repo
+import org.scalasteward.core.data.Update
 import org.scalasteward.core.io.{FileAlg, WorkspaceAlg}
-import org.scalasteward.core.model.Update
 import org.scalasteward.core.repoconfig.RepoConfigAlg._
 import org.scalasteward.core.util.MonadThrowable
+import org.scalasteward.core.vcs.data.Repo
 
-class RepoConfigAlg[F[_]](
+final class RepoConfigAlg[F[_]](
     implicit
     fileAlg: FileAlg[F],
     logger: Logger[F],
     workspaceAlg: WorkspaceAlg[F],
     F: MonadThrowable[F]
 ) {
-  def getRepoConfig(repo: Repo): F[RepoConfig] =
+  def readRepoConfigOrDefault(repo: Repo): F[RepoConfig] =
+    readRepoConfig(repo).map(_.getOrElse(RepoConfig.default))
+
+  def readRepoConfig(repo: Repo): F[Option[RepoConfig]] =
     workspaceAlg.repoDir(repo).flatMap { dir =>
       val configFile = dir / repoConfigBasename
-      val maybeRepoConfig = OptionT(fileAlg.readFile(configFile)).flatMapF { content =>
-        parseRepoConfig(content) match {
-          case Right(config) =>
-            logger.info(s"Parsed $config from $configFile") >> F.pure(config.some)
-          case Left(errorMsg) =>
-            logger.info(errorMsg).as(none[RepoConfig])
-        }
+      val maybeRepoConfig = OptionT(fileAlg.readFile(configFile)).map(parseRepoConfig).flatMapF {
+        case Right(config)  => logger.info(s"Parsed $config") >> F.pure(config.some)
+        case Left(errorMsg) => logger.info(errorMsg).as(none[RepoConfig])
       }
-      maybeRepoConfig.getOrElse(RepoConfig())
+      maybeRepoConfig.value
     }
 }
 
@@ -59,8 +58,8 @@ object RepoConfigAlg {
   def configToIgnoreFurtherUpdates(update: Update): String =
     update match {
       case s: Update.Single =>
-        s"""updates.ignore = [{ groupId = "${s.groupId}", artifactId = "${s.artifactId}" }]"""
+        s"""updates.ignore = [ { groupId = "${s.groupId}", artifactId = "${s.artifactId}" } ]"""
       case g: Update.Group =>
-        s"""updates.ignore = [{ groupId = "${g.groupId}" }]"""
+        s"""updates.ignore = [ { groupId = "${g.groupId}" } ]"""
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,11 @@
 package org.scalasteward.core.sbt.data
 
 import io.circe.{Decoder, Encoder}
+import org.scalasteward.core.data.Version
 
-final case class SbtVersion(value: String)
+final case class SbtVersion(value: String) {
+  def toVersion: Version = Version(value)
+}
 
 object SbtVersion {
   implicit val sbtVersionDecoder: Decoder[SbtVersion] =

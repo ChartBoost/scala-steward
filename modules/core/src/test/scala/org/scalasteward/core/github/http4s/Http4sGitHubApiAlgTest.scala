@@ -6,15 +6,16 @@ import org.http4s.circe._
 import org.http4s.client.Client
 import org.http4s.dsl.io._
 import org.http4s.implicits._
-import org.http4s.{HttpRoutes, Uri}
+import org.http4s.{Http4sLiteralSyntax, HttpRoutes}
 import org.scalasteward.core.git.Sha1.HexString
 import org.scalasteward.core.git.{Branch, Sha1}
-import org.scalasteward.core.github.data._
 import org.scalasteward.core.mock.MockContext.config
 import org.scalasteward.core.util.HttpJsonClient
-import org.scalatest.{FunSuite, Matchers}
+import org.scalasteward.core.vcs.data._
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class Http4sGitHubApiAlgTest extends FunSuite with Matchers {
+class Http4sGitHubApiAlgTest extends AnyFunSuite with Matchers {
 
   val routes: HttpRoutes[IO] =
     HttpRoutes.of[IO] {
@@ -59,7 +60,7 @@ class Http4sGitHubApiAlgTest extends FunSuite with Matchers {
 
   implicit val client: Client[IO] = Client.fromHttpApp(routes.orNotFound)
   implicit val httpJsonClient: HttpJsonClient[IO] = new HttpJsonClient[IO]
-  val gitHubApiAlg = new Http4sGitHubApiAlg[IO](config.gitHubApiHost, _ => IO.pure)
+  val gitHubApiAlg = new Http4sGitHubApiAlg[IO](config.vcsApiHost, _ => IO.pure)
 
   val repo = Repo("fthomas", "base.g8")
 
@@ -67,7 +68,7 @@ class Http4sGitHubApiAlgTest extends FunSuite with Matchers {
     "base.g8",
     UserOut("fthomas"),
     None,
-    Uri.uri("https://github.com/fthomas/base.g8.git"),
+    uri"https://github.com/fthomas/base.g8.git",
     Branch("master")
   )
 
@@ -75,7 +76,7 @@ class Http4sGitHubApiAlgTest extends FunSuite with Matchers {
     "base.g8-1",
     UserOut("scala-steward"),
     Some(parent),
-    Uri.uri("https://github.com/scala-steward/base.g8-1.git"),
+    uri"https://github.com/scala-steward/base.g8-1.git",
     Branch("master")
   )
 

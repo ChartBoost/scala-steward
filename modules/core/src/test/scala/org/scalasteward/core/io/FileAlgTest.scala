@@ -4,12 +4,26 @@ import better.files.File
 import cats.effect.IO
 import cats.implicits._
 import org.scalacheck.Arbitrary
+import org.scalasteward.core.TestInstances.ioLogger
+import org.scalasteward.core.io.FileAlgTest.ioFileAlg
 import org.scalasteward.core.mock.MockContext.fileAlg
 import org.scalasteward.core.mock.MockState
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class FileAlgTest extends FunSuite with Matchers {
-  val ioFileAlg: FileAlg[IO] = FileAlg.create[IO]
+class FileAlgTest extends AnyFunSuite with Matchers {
+  test("createTemporarily") {
+    val file = File.temp / "test-scala-steward3.tmp"
+    val content = Arbitrary.arbitrary[String].sample.getOrElse("")
+
+    val p = for {
+      before <- ioFileAlg.readFile(file)
+      during <- ioFileAlg.createTemporarily(file, content)(ioFileAlg.readFile(file))
+      after <- ioFileAlg.readFile(file)
+    } yield (before, during, after)
+
+    p.unsafeRunSync() shouldBe ((None, Some(content), None))
+  }
 
   test("writeFile *> readFile <* deleteForce") {
     val file = File.temp / "test-scala-steward1.tmp"
@@ -32,6 +46,11 @@ class FileAlgTest extends FunSuite with Matchers {
     } yield (before, during, after)
 
     p.unsafeRunSync() shouldBe ((Some(content), None, Some(content)))
+  }
+
+  test("removeTemporarily: nonexistent file") {
+    val file = File.temp / "does-not-exists.txt"
+    ioFileAlg.removeTemporarily(file)(IO.pure(42)).unsafeRunSync() shouldBe 42
   }
 
   test("editFile: nonexistent file") {
@@ -66,27 +85,8 @@ class FileAlgTest extends FunSuite with Matchers {
     )
     edited shouldBe true
   }
+}
 
-  test("editSourceFiles") {
-    val file1 = File.root / "tmp" / "steward" / "test1.sbt"
-    val file2 = File.root / "tmp" / "steward" / "test2.scala"
-    val (state, edited) = (for {
-      _ <- fileAlg.writeFile(file1, "123")
-      _ <- fileAlg.writeFile(file2, "456")
-      edit = (s: String) => if (s.contains("2")) Some(s.replace("2", "8")) else None
-      edited <- fileAlg.editSourceFiles(file1.parent, edit)
-    } yield edited).run(MockState.empty).unsafeRunSync()
-
-    state shouldBe MockState.empty.copy(
-      commands = Vector(
-        List("write", file1.pathAsString),
-        List("write", file2.pathAsString),
-        List("read", file1.pathAsString),
-        List("write", file1.pathAsString),
-        List("read", file2.pathAsString)
-      ),
-      files = Map(file1 -> "183", file2 -> "456")
-    )
-    edited shouldBe true
-  }
+object FileAlgTest {
+  implicit val ioFileAlg: FileAlg[IO] = FileAlg.create[IO]
 }

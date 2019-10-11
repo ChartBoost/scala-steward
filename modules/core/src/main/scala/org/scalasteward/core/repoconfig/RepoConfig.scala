@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 
 package org.scalasteward.core.repoconfig
 
-import io.circe.Decoder
 import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.deriveDecoder
+import io.circe.generic.extras.semiauto._
+import io.circe.{Decoder, Encoder}
 
 final case class RepoConfig(
     updates: UpdatesConfig = UpdatesConfig(),
@@ -26,9 +26,14 @@ final case class RepoConfig(
 )
 
 object RepoConfig {
+  val default = RepoConfig()
+
   implicit val customConfig: Configuration =
     Configuration.default.withDefaults
 
   implicit val repoConfigDecoder: Decoder[RepoConfig] =
     deriveDecoder
+
+  implicit val repoConfigEncoder: Encoder[RepoConfig] =
+    deriveEncoder
 }

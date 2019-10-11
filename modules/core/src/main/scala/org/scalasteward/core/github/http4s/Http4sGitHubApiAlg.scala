@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,20 @@
 
 package org.scalasteward.core.github.http4s
 
-import cats.effect.Sync
 import org.http4s.{Request, Uri}
 import org.scalasteward.core.git.Branch
 import org.scalasteward.core.github._
-import org.scalasteward.core.github.data._
 import org.scalasteward.core.util.HttpJsonClient
+import org.scalasteward.core.vcs.VCSApiAlg
+import org.scalasteward.core.vcs.data._
 
-final class Http4sGitHubApiAlg[F[_]: Sync](
+final class Http4sGitHubApiAlg[F[_]](
     gitHubApiHost: Uri,
     modify: Repo => Request[F] => F[Request[F]]
 )(
     implicit
     client: HttpJsonClient[F]
-) extends GitHubApiAlg[F] {
+) extends VCSApiAlg[F] {
   private val url = new Url(gitHubApiHost)
 
   override def createFork(repo: Repo): F[RepoOut] =
@@ -44,6 +44,6 @@ final class Http4sGitHubApiAlg[F[_]: Sync](
   override def getRepo(repo: Repo): F[RepoOut] =
     client.get(url.repos(repo), modify(repo))
 
-  override def listPullRequests(repo: Repo, head: String): F[List[PullRequestOut]] =
-    client.get(url.listPullRequests(repo, head), modify(repo))
+  override def listPullRequests(repo: Repo, head: String, base: Branch): F[List[PullRequestOut]] =
+    client.get(url.listPullRequests(repo, head, base), modify(repo))
 }

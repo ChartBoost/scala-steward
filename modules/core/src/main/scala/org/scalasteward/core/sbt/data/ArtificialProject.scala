@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package org.scalasteward.core.sbt.data
 
-import org.scalasteward.core.dependency.Dependency
+import org.scalasteward.core.data.Dependency
 import org.scalasteward.core.io.FileData
 import org.scalasteward.core.sbt.command.{dependencyUpdates, reloadPlugins}
 import org.scalasteward.core.util
