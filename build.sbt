@@ -214,7 +214,7 @@ addCommandAlias(
 addCommandAlias(
   "runAdserverBot", {
     val home = System.getenv("HOME")
-    val projectDir = System.getenv("STEWARD_DIR")
+    val projectDir = System.getenv("WORKSPACE")
     Seq(
       Seq("core/run"),
       Seq("--workspace", s"$projectDir/workspace"),
