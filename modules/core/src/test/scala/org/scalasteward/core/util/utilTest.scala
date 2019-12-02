@@ -4,10 +4,11 @@ import cats.effect.IO
 import cats.implicits._
 import eu.timepit.refined.scalacheck.numeric._
 import eu.timepit.refined.types.numeric.PosInt
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
-class utilTest extends FunSuite with Matchers with ScalaCheckPropertyChecks {
+class utilTest extends AnyFunSuite with Matchers with ScalaCheckPropertyChecks {
   test("bindUntilTrue: empty list") {
     bindUntilTrue(List.empty[Option[Boolean]]) shouldBe Some(false)
   }
@@ -44,7 +45,7 @@ class utilTest extends FunSuite with Matchers with ScalaCheckPropertyChecks {
     }
   }
 
-  test("halve: first halve is at most one element longer than the second") {
+  test("halve: first half is at most one element longer than the second") {
     forAll { l: List[Int] =>
       val (fst, snd) = halve(l).leftMap(lst => (lst, List.empty[Int])).merge
       (fst.size - snd.size) should equal(0).or(equal(1))
@@ -77,7 +78,7 @@ class utilTest extends FunSuite with Matchers with ScalaCheckPropertyChecks {
   test("separateBy: sublists decrease in length") {
     forAll { (l: List[Char], n: PosInt, f: Char => Int) =>
       val lengths = separateBy(l)(n)(f).map(_.length)
-      lengths.zip((lengths :+ 0).tail).forall { case (l1, l2) => l1 >= l2 } shouldBe true
+      lengths.zip((lengths :+ 0).drop(1)).forall { case (l1, l2) => l1 >= l2 } shouldBe true
     }
   }
 

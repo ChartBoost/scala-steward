@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,13 +21,15 @@ import cats.effect.Sync
 import org.http4s.Uri
 import org.scalasteward.core.application.Cli.EnvVar
 import org.scalasteward.core.git.Author
-import org.scalasteward.core.github.data.AuthenticatedUser
 import org.scalasteward.core.util
+import org.scalasteward.core.vcs.data.AuthenticatedUser
+
+import scala.concurrent.duration.FiniteDuration
 import scala.sys.process.Process
 
 /** Configuration for scala-steward.
   *
-  * == [[gitHubApiHost]] ==
+  * == [[vcsApiHost]] ==
   * REST API v3 endpoints prefix
   *
   * For github.com this is "https://api.github.com", see
@@ -38,7 +40,7 @@ import scala.sys.process.Process
   *
   * == [[gitAskPass]] ==
   * Program that is invoked by scala-steward and git (via the `GIT_ASKPASS`
-  * environment variable) to request the password for the user [[gitHubLogin]].
+  * environment variable) to request the password for the user [[vcsLogin]].
   *
   * This program could just be a simple shell script that echos the password.
   *
@@ -48,8 +50,9 @@ final case class Config(
     workspace: File,
     reposFile: File,
     gitAuthor: Author,
-    gitHubApiHost: Uri,
-    gitHubLogin: String,
+    vcsType: SupportedVCS,
+    vcsApiHost: Uri,
+    vcsLogin: String,
     gitAskPass: File,
     signCommits: Boolean,
     whitelistedDirectories: List[String],
@@ -57,15 +60,16 @@ final case class Config(
     disableSandbox: Boolean,
     doNotFork: Boolean,
     ignoreOptsFiles: Boolean,
-    keepCredentials: Boolean,
-    envVars: List[EnvVar]
+    envVars: List[EnvVar],
+    pruneRepos: Boolean,
+    processTimeout: FiniteDuration
 ) {
-  def gitHubUser[F[_]](implicit F: Sync[F]): F[AuthenticatedUser] = {
-    val urlWithUser = util.uri.withUserInfo.set(gitHubLogin)(gitHubApiHost).renderString
+  def vcsUser[F[_]](implicit F: Sync[F]): F[AuthenticatedUser] = {
+    val urlWithUser = util.uri.withUserInfo.set(vcsLogin)(vcsApiHost).renderString
     val prompt = s"Password for '$urlWithUser': "
     F.delay {
       val password = Process(List(gitAskPass.pathAsString, prompt)).!!.trim
-      AuthenticatedUser(gitHubLogin, password)
+      AuthenticatedUser(vcsLogin, password)
     }
   }
 }
@@ -77,8 +81,9 @@ object Config {
         workspace = args.workspace.toFile,
         reposFile = args.reposFile.toFile,
         gitAuthor = Author(args.gitAuthorName, args.gitAuthorEmail),
-        gitHubApiHost = args.githubApiHost,
-        gitHubLogin = args.githubLogin,
+        vcsType = args.vcsType,
+        vcsApiHost = args.vcsApiHost,
+        vcsLogin = args.vcsLogin,
         gitAskPass = args.gitAskPass.toFile,
         signCommits = args.signCommits,
         whitelistedDirectories = args.whitelist,
@@ -86,8 +91,9 @@ object Config {
         disableSandbox = args.disableSandbox,
         doNotFork = args.doNotFork,
         ignoreOptsFiles = args.ignoreOptsFiles,
-        keepCredentials = args.keepCredentials,
-        envVars = args.envVar
+        envVars = args.envVar,
+        pruneRepos = args.pruneRepos,
+        processTimeout = args.processTimeout
       )
     }
 }

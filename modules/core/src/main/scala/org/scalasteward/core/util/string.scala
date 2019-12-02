@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,19 +16,43 @@
 
 package org.scalasteward.core.util
 
+import cats.Foldable
+import cats.implicits._
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.collection.MinSize
 import eu.timepit.refined.refineV
-import shapeless.Witness
+import eu.timepit.refined.types.numeric.NonNegBigInt
+import org.scalasteward.core.util.Change.{Changed, Unchanged}
+import scala.util.Try
 import scala.util.matching.Regex
+import shapeless.Witness
 
 object string {
   type MinLengthString[N] = String Refined MinSize[N]
 
+  /** Extracts words from a string.
+    *
+    * Words are separated by '-', '_', '.', or a change from lower to
+    * upper case and are at least three characters long.
+    */
+  def extractWords(s: String): List[String] = {
+    val minLength = 3
+    val splitBySeparators = s.split(Array('-', '_', '.')).toList
+    splitBySeparators
+      .flatMap(splitBetweenLowerAndUpperChars)
+      .filter(_.length >= minLength)
+  }
+
+  def indentLines[F[_]: Foldable](fs: F[String]): String = {
+    val indent = "  "
+    val delim = "\n" + indent
+    fs.foldSmash(indent, delim, "")
+  }
+
   def longestCommonPrefix(s1: String, s2: String): String = {
     var i = 0
     val min = math.min(s1.length, s2.length)
-    while (i < min && s1(i) == s2(i)) i = i + 1
+    while (i < min && s1(i) === s2(i)) i = i + 1
     s1.substring(0, i)
   }
 
@@ -40,15 +64,15 @@ object string {
   /** Like `Regex.replaceSomeIn` but indicates via the return type if there
     * was at least one match that has been replaced.
     */
-  def replaceSomeInOpt(
+  def replaceSomeInChange(
       regex: Regex,
       target: CharSequence,
       replacer: Regex.Match => Option[String]
-  ): Option[String] = {
+  ): Change[String] = {
     var changed = false
     val replacer1 = replacer.andThen(_.map(r => { changed = true; r }))
     val result = regex.replaceSomeIn(target, replacer1)
-    if (changed) Some(result) else None
+    if (changed) Changed(result) else Unchanged(result)
   }
 
   def removeSuffix(target: String, suffixes: List[String]): String =
@@ -69,5 +93,27 @@ object string {
   def lineLeftRight(s: String): String = {
     val line = "─" * 12
     s"$line $s $line"
+  }
+
+  def parseNonNegBigInt(s: String): Option[NonNegBigInt] =
+    Try(BigInt(s)).toOption.flatMap(NonNegBigInt.unapply)
+
+  /** Splits a string between lower and upper case characters.
+    *
+    * @example {{{
+    * scala> string.splitBetweenLowerAndUpperChars("javaLowerCase")
+    * res1: List[String] = List(java, Lower, Case)
+    *
+    * scala> string.splitBetweenLowerAndUpperChars("HikariCP")
+    * res2: List[String] = List(Hikari, CP)
+    * }}}
+    */
+  def splitBetweenLowerAndUpperChars(s: String): List[String] =
+    splitBetween2CharMatches("\\p{javaLowerCase}\\p{javaUpperCase}".r)(s)
+
+  private def splitBetween2CharMatches(regex: Regex)(s: String): List[String] = {
+    val bounds = regex.findAllIn(s).matchData.map(_.start + 1).toList
+    val indices = 0 +: bounds :+ s.length
+    indices.sliding(2).collect { case i1 :: i2 :: Nil => s.substring(i1, i2) }.toList
   }
 }

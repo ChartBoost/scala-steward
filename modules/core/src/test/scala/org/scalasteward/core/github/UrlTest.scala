@@ -1,12 +1,13 @@
 package org.scalasteward.core.github
 
-import org.http4s.Uri
+import org.http4s.Http4sLiteralSyntax
 import org.scalasteward.core.git.Branch
-import org.scalasteward.core.github.data.Repo
-import org.scalatest.{FunSuite, Matchers}
+import org.scalasteward.core.vcs.data.Repo
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class UrlTest extends FunSuite with Matchers {
-  val url = new Url(Uri.uri("https://api.github.com"))
+class UrlTest extends AnyFunSuite with Matchers {
+  val url = new Url(uri"https://api.github.com")
   import url._
 
   val repo = Repo("fthomas", "refined")
@@ -23,8 +24,8 @@ class UrlTest extends FunSuite with Matchers {
   }
 
   test("listPullRequests") {
-    listPullRequests(repo, "scala-steward:update/fs2-core-1.0.0").toString shouldBe
-      "https://api.github.com/repos/fthomas/refined/pulls?head=scala-steward%3Aupdate/fs2-core-1.0.0&state=all"
+    listPullRequests(repo, "scala-steward:update/fs2-core-1.0.0", Branch("series/0.6.x")).toString shouldBe
+      "https://api.github.com/repos/fthomas/refined/pulls?head=scala-steward%3Aupdate/fs2-core-1.0.0&base=series/0.6.x&state=all"
   }
 
   test("pulls") {

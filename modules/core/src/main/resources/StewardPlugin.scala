@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package sbt.scalasteward
+package org.scalasteward.core
 
 import sbt.Keys._
 import sbt._
@@ -24,24 +24,27 @@ object StewardPlugin extends AutoPlugin {
   override def trigger: PluginTrigger = allRequirements
 
   object autoImport {
-    val libraryDependenciesAsJson = settingKey[String]("")
+    val libraryDependenciesAsJson = taskKey[String]("")
   }
 
   import autoImport._
 
+  def crossName(moduleId: ModuleID, scalaVersion: String, scalaBinaryVersion: String): String =
+    CrossVersion(moduleId.crossVersion, scalaVersion, scalaBinaryVersion)
+      .getOrElse(identity[String](_))(moduleId.name)
+
   override def projectSettings: Seq[Def.Setting[_]] = Seq(
     libraryDependenciesAsJson := {
-      val deps = libraryDependencies.value.map {
-        moduleId =>
-          val cross =
-            CrossVersion(moduleId.crossVersion, scalaVersion.value, scalaBinaryVersion.value)
-          val artifactIdCross =
-            CrossVersion.applyCross(moduleId.name, cross)
+      val sourcePositions = dependencyPositions.value
+      val scalaBinaryVersionValue = scalaBinaryVersion.value
+      val scalaVersionValue = scalaVersion.value
 
+      val deps = libraryDependencies.value.filter(isDefinedInBuildFiles(_, sourcePositions)).map {
+        moduleId =>
           val entries: List[(String, String)] = List(
             "groupId" -> moduleId.organization,
             "artifactId" -> moduleId.name,
-            "artifactIdCross" -> artifactIdCross,
+            "artifactIdCross" -> crossName(moduleId, scalaVersionValue, scalaBinaryVersionValue),
             "version" -> moduleId.revision
           ) ++
             moduleId.extraAttributes.get("e:sbtVersion").map("sbtVersion" -> _).toList ++
@@ -52,4 +55,19 @@ object StewardPlugin extends AutoPlugin {
       deps.mkString("[ ", ", ", " ]")
     }
   )
+
+  // Inspired by https://github.com/rtimush/sbt-updates/issues/42
+  private def isDefinedInBuildFiles(
+      moduleId: ModuleID,
+      sourcePositions: Map[ModuleID, SourcePosition]
+  ): Boolean =
+    sourcePositions.get(moduleId) match {
+      case Some(fp: FilePosition) if fp.path.startsWith("(sbt.Classpaths") => true
+      case Some(fp: FilePosition) if fp.path.startsWith("(")               => false
+      case Some(fp: FilePosition)
+          if fp.path.startsWith("Defaults.scala")
+            && !moduleId.configurations.exists(_ == "plugin->default(compile)") =>
+        false
+      case _ => true
+    }
 }

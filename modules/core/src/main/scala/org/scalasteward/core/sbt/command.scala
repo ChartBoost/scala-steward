@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,10 @@ package org.scalasteward.core.sbt
 
 object command {
   val dependencyUpdates = "dependencyUpdates"
-  val libraryDependenciesAsJson = "libraryDependenciesAsJson"
+  val libraryDependenciesAsJson = "show libraryDependenciesAsJson"
   val reloadPlugins = "reload plugins"
-  val setCredentialsToNil = "set every credentials := Nil"
+  val scalafix = "scalafix"
+  val testScalafix = "test:scalafix"
+  val scalafixEnable = "scalafixEnable"
+  val setDependencyUpdatesFailBuild = "set every dependencyUpdatesFailBuild := false"
 }

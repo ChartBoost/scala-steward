@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import cats.Applicative
 import cats.implicits._
 import org.http4s.headers.Authorization
 import org.http4s.{BasicCredentials, Request}
-import org.scalasteward.core.github.data.AuthenticatedUser
+import org.scalasteward.core.vcs.data.AuthenticatedUser
 
 object authentication {
   def addCredentials[F[_]: Applicative](user: AuthenticatedUser): Request[F] => F[Request[F]] =

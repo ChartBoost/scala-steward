@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@
 package org.scalasteward.core.repoconfig
 
 import cats.implicits._
-import io.circe.Decoder
 import io.circe.generic.extras.Configuration
-import io.circe.generic.extras.semiauto.deriveDecoder
-import org.scalasteward.core.model.Update
+import io.circe.generic.extras.semiauto._
+import io.circe.{Decoder, Encoder}
+import org.scalasteward.core.data.Update
 import org.scalasteward.core.update.FilterAlg.{FilterResult, IgnoredByConfig, NotAllowedByConfig}
 
 final case class UpdatesConfig(
@@ -48,4 +48,7 @@ object UpdatesConfig {
 
   implicit val updatesConfigDecoder: Decoder[UpdatesConfig] =
     deriveDecoder
+
+  implicit val updatesConfigEncoder: Encoder[UpdatesConfig] =
+    deriveEncoder
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.scalasteward.core.update
 
 import cats.Traverse
 import cats.implicits._
-import org.scalasteward.core.model.Update
+import org.scalasteward.core.data.{GroupId, Update}
 import org.scalasteward.core.util
 import org.scalasteward.core.util.Nel
 
@@ -26,7 +26,7 @@ object show {
   def oneLiner(update: Update): String =
     commaSeparated(update.groupId, update.artifactIds)
 
-  private def commaSeparated(groupId: String, artifactIds: Nel[String]): String = {
+  private def commaSeparated(groupId: GroupId, artifactIds: Nel[String]): String = {
     val artifacts = showArtifacts(groupId, artifactIds).toList
     val count = maxArtifacts(artifacts)
     val items = if (count < artifacts.size) artifacts.take(count) :+ "..." else artifacts
@@ -35,17 +35,21 @@ object show {
 
   private def maxArtifacts(artifacts: List[String]): Int = {
     val maxLength = 32
-    val accumulatedLengths = artifacts.map(_.length).scanLeft(0)(_ + _).tail
+    val accumulatedLengths = artifacts.map(_.length).scanLeft(0)(_ + _).drop(1)
     math.max(1, accumulatedLengths.takeWhile(_ <= maxLength).size)
   }
 
-  private def showArtifacts[F[_]: Traverse](groupId: String, artifactIds: F[String]): F[String] = {
+  private def showArtifacts[F[_]: Traverse](groupId: GroupId, artifactIds: F[String]): F[String] = {
     val includeGroupId = util.intersects(artifactIds, Update.commonSuffixes)
     artifactIds.map(showArtifact(groupId, _, includeGroupId))
   }
 
-  private def showArtifact(groupId: String, artifactId: String, includeGroupId: Boolean): String = {
-    val groupName = util.string.rightmostLabel(groupId)
+  private def showArtifact(
+      groupId: GroupId,
+      artifactId: String,
+      includeGroupId: Boolean
+  ): String = {
+    val groupName = util.string.rightmostLabel(groupId.value)
     if (!includeGroupId || artifactId.contains(groupName)) artifactId
     else groupName + ":" + artifactId
   }

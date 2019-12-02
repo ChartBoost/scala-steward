@@ -1,21 +1,24 @@
 package org.scalasteward.core.github
 
-import org.http4s.Uri
+import org.http4s.Http4sLiteralSyntax
 import org.scalasteward.core.git.Branch
-import org.scalasteward.core.github.data.{Repo, RepoOut, UserOut}
 import org.scalasteward.core.mock.MockContext.{config, gitAlg, gitHubRepoAlg}
 import org.scalasteward.core.mock.{MockContext, MockState}
-import org.scalatest.{FunSuite, Matchers}
+import org.scalasteward.core.vcs.VCSRepoAlg
+import org.scalasteward.core.vcs.data.{Repo, RepoOut, UserOut}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class GitHubRepoAlgTest extends FunSuite with Matchers {
+class GitHubRepoAlgTest extends AnyFunSuite with Matchers {
   val repo = Repo("fthomas", "datapackage")
   val repoDir: String = (config.workspace / "fthomas/datapackage").toString
+  val askPass = s"GIT_ASKPASS=${config.gitAskPass}"
 
   val parentRepoOut = RepoOut(
     "datapackage",
     UserOut("fthomas"),
     None,
-    Uri.uri("https://github.com/fthomas/datapackage"),
+    uri"https://github.com/fthomas/datapackage",
     Branch("master")
   )
 
@@ -23,7 +26,7 @@ class GitHubRepoAlgTest extends FunSuite with Matchers {
     "datapackage",
     UserOut("scalasteward"),
     Some(parentRepoOut),
-    Uri.uri("https://github.com/scala-steward/datapackage"),
+    uri"https://github.com/scala-steward/datapackage",
     Branch("master")
   )
 
@@ -33,20 +36,16 @@ class GitHubRepoAlgTest extends FunSuite with Matchers {
     state shouldBe MockState.empty.copy(
       commands = Vector(
         List(
+          askPass,
           config.workspace.toString,
           "git",
           "clone",
           "--recursive",
-          s"https://${config.gitHubLogin}@github.com/scala-steward/datapackage",
+          s"https://${config.vcsLogin}@github.com/scala-steward/datapackage",
           repoDir.toString
         ),
-        List(repoDir, "git", "config", "user.email", "bot@example.org"),
-        List(repoDir, "git", "config", "user.name", "Bot Doe")
-      ),
-      extraEnv = Vector(
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString))
+        List(askPass, repoDir, "git", "config", "user.email", "bot@example.org"),
+        List(askPass, repoDir, "git", "config", "user.name", "Bot Doe")
       )
     )
   }
@@ -67,24 +66,18 @@ class GitHubRepoAlgTest extends FunSuite with Matchers {
     state shouldBe MockState.empty.copy(
       commands = Vector(
         List(
+          askPass,
           repoDir,
           "git",
           "remote",
           "add",
           "upstream",
-          s"https://${config.gitHubLogin}@github.com/fthomas/datapackage"
+          s"https://${config.vcsLogin}@github.com/fthomas/datapackage"
         ),
-        List(repoDir, "git", "fetch", "upstream"),
-        List(repoDir, "git", "checkout", "-B", "master", "--track", "upstream/master"),
-        List(repoDir, "git", "merge", "upstream/master"),
-        List(repoDir, "git", "push", "--force", "--set-upstream", "origin", "master")
-      ),
-      extraEnv = Vector(
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString)),
-        List(("GIT_ASKPASS", config.gitAskPass.toString))
+        List(askPass, repoDir, "git", "fetch", "upstream", "master"),
+        List(askPass, repoDir, "git", "checkout", "-B", "master", "--track", "upstream/master"),
+        List(askPass, repoDir, "git", "merge", "upstream/master"),
+        List(askPass, repoDir, "git", "push", "--force", "--set-upstream", "origin", "master")
       )
     )
     result shouldBe parentRepoOut
@@ -92,7 +85,7 @@ class GitHubRepoAlgTest extends FunSuite with Matchers {
 
   test("syncFork should do nothing when doNotFork = true") {
     val (state, repoOut) =
-      GitHubRepoAlg
+      VCSRepoAlg
         .create(MockContext.config.copy(doNotFork = true), gitAlg)
         .syncFork(repo, parentRepoOut)
         .run(MockState.empty)

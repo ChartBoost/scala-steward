@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019 scala-steward contributors
+ * Copyright 2018-2019 Scala Steward contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,12 +17,12 @@
 package org.scalasteward.core.repoconfig
 
 import cats.implicits._
-import io.circe.Decoder
-import io.circe.generic.semiauto.deriveDecoder
-import org.scalasteward.core.model.Update
+import io.circe.generic.semiauto._
+import io.circe.{Decoder, Encoder}
+import org.scalasteward.core.data.{GroupId, Update}
 
 final case class UpdatePattern(
-    groupId: String,
+    groupId: GroupId,
     artifactId: Option[String],
     version: Option[String]
 )
@@ -42,4 +42,7 @@ object UpdatePattern {
 
   implicit val updatePatternDecoder: Decoder[UpdatePattern] =
     deriveDecoder
+
+  implicit val updatePatternEncoder: Encoder[UpdatePattern] =
+    deriveEncoder
 }
