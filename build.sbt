@@ -260,7 +260,7 @@ addCommandAlias(
       Seq("--whitelist", s"$home/.coursier"),
       Seq("--whitelist", s"$home/.ivy2"),
       Seq("--whitelist", s"$home/.sbt"),
-      Seq("--whitelist", s"$home/.scio-ideaPluginIC")     
+      Seq("--whitelist", s"$home/.scio-ideaPluginIC")
     ).flatten.mkString(" ")
   }
 )
