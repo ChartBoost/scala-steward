@@ -214,7 +214,7 @@ addCommandAlias(
 addCommandAlias(
   "runAdserverBot", {
     val home = System.getenv("HOME")
-    val projectDir = "/home/jenkins/workspace/adserver-bot-runner"
+    val projectDir = System.getenv("STEWARD_DIR")
     Seq(
       Seq("core/run"),
       Seq("--workspace", s"$projectDir/workspace"),
@@ -223,7 +223,7 @@ addCommandAlias(
       Seq("--git-author-email", s"adserver-team@chartboost.com"),
       Seq("--github-api-host", "https://api.github.com"),
       Seq("--github-login", "adserver-bot"),
-      Seq("--git-ask-pass", "/home/jenkins/workspace/adserver-bot-runner/scala_steward.sh"),
+      Seq("--git-ask-pass", s"$projectDir/scala_steward.sh"),
       Seq("--disable-sandbox"),
       Seq("--do-not-fork"),
       // Seq("--sign-commits"), -- try to sign commits
