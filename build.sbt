@@ -251,7 +251,6 @@ addCommandAlias(
       Seq("--repos-file", s"$projectDir/repos.md"),
       Seq("--git-author-name", "adserver-bot"),
       Seq("--git-author-email", s"adserver-team@chartboost.com"),
-      Seq("--github-api-host", "https://api.github.com"),
       Seq("--vcs-login", "adserver-bot"),
       Seq("--git-ask-pass", s"$projectDir/scala_steward.sh"),
       Seq("--disable-sandbox"),
