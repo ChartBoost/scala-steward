@@ -5,11 +5,12 @@ module.exports = {
     "groupBy": {
         "Enhancements": ["enhancement"],
         "Bug Fixes": ["bug"],
-        "Documentation": ["doc"],
+        "Scalafix Migrations": ["scalafix-migration"],
+        "Documentation": ["documentation"],
         "Test Improvements": ["testing"],
         "Build Improvements": ["build"],
-        "Dependency Updates": ["dependency-update"],
-        "Refactorings": ["refactoring"]
+        "Refactorings": ["refactoring"],
+        "Dependency Updates": ["dependency-update"]
     },
     "changelogFilename": "CHANGELOG.md",
     "template": {
