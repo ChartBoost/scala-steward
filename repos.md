@@ -1,2 +1,3 @@
 - Chartboost/adserver
 - Chartboost/bidderml-pipeline
+- Chartboost/mnemonic
