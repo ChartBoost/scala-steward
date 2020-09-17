@@ -1,6 +1,5 @@
 import com.typesafe.sbt.packager.docker._
 import sbtcrossproject.{CrossProject, CrossType, Platform}
-
 /// variables
 
 val groupId = "org.scala-steward"
@@ -309,4 +308,49 @@ addCommandsAlias(
     "test:scalafmt",
     "scalafmtSbt"
   )
+)
+
+addCommandAlias(
+  "runSteward", {
+    val home = System.getenv("HOME")
+    val projectDir = s"$home/code/sso/batch"
+    Seq(
+      Seq("core/run"),
+      Seq("--workspace", s"$projectDir/workspace"),
+      Seq("--repos-file", s"$projectDir/repos.md"),
+      Seq("--git-author-name", "Scala steward"),
+      Seq("--git-author-email", s"me@$projectName.org"),
+      Seq("--github-login", projectName),
+      Seq("--git-ask-pass", s"$home/.github/askpass/$projectName.sh"),
+      Seq("--whitelist", s"$home/.cache/coursier"),
+      Seq("--whitelist", s"$home/.coursier"),
+      Seq("--whitelist", s"$home/.ivy2"),
+      Seq("--whitelist", s"$home/.sbt"),
+      Seq("--whitelist", s"$home/.scio-ideaPluginIC")
+    ).flatten.mkString(" ")
+  }
+)
+
+addCommandAlias(
+  "runAdserverBot", {
+    val home = System.getenv("HOME")
+    val projectDir = System.getenv("WORKSPACE")
+    Seq(
+      Seq("core/run"),
+      Seq("--workspace", s"$projectDir/workspace"),
+      Seq("--repos-file", s"$projectDir/repos.md"),
+      Seq("--git-author-name", "adserver-bot"),
+      Seq("--git-author-email", s"adserver-team@chartboost.com"),
+      Seq("--vcs-login", "adserver-bot"),
+      Seq("--git-ask-pass", s"$projectDir/scala_steward.sh"),
+      Seq("--disable-sandbox"),
+      Seq("--do-not-fork"),
+      // Seq("--sign-commits"), -- try to sign commits
+      Seq("--whitelist", s"$home/.cache/coursier"),
+      Seq("--whitelist", s"$home/.coursier"),
+      Seq("--whitelist", s"$home/.ivy2"),
+      Seq("--whitelist", s"$home/.sbt"),
+      Seq("--whitelist", s"$home/.scio-ideaPluginIC")
+    ).flatten.mkString(" ")
+  }
 )
